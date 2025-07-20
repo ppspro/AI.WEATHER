@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern AI Weather Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            background: linear-gradient(-45deg, #6a82fb, #fc5c7d, #fbd786, #f7797d);
+            background-size: 400% 400%;
+            animation: gradient-flow 15s ease infinite;
+        }
+
+        @keyframes gradient-flow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+        .dynamic-bg { transition: background 0.5s ease-in-out; }
+        .bg-day-clear { background: linear-gradient(135deg, #87CEEB 0%, #5F9EA0 100%); }
+        .bg-day-cloudy { background: linear-gradient(135deg, #B0C4DE 0%, #778899 100%); }
+        .bg-day-rain { background: linear-gradient(135deg, #778899 0%, #4682B4 100%); }
+        .bg-night-clear { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
+        .bg-night-cloudy { background: linear-gradient(135deg, #232526 0%, #414345 100%); }
+        .bg-night-rain { background: linear-gradient(135deg, #1c2833 0%, #283747 100%); }
+
+        .loader, .gemini-loader {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid #ffffff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+        .gemini-loader { width: 24px; height: 24px; border-width: 3px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal { transition: opacity 0.25s ease; }
+        .modal-content { transition: transform 0.25s ease; }
+    </style>
+</head>
+<body class="text-white">
+
+    <div id="app" class="container mx-auto p-4 md:p-6 max-w-7xl">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold tracking-wide">Weather Dashboard</h1>
+            <p class="text-white/80 mt-1">AI-Powered Forecasts & Insights</p>
+        </header>
+
+        <section id="search-section" class="mb-6">
+            <form id="weather-form" class="max-w-xl mx-auto flex shadow-lg rounded-lg">
+                <input type="text" id="location-input" placeholder="Enter a city name..." class="w-full p-3 rounded-l-lg border-0 bg-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50">
+                <button type="submit" class="bg-white/30 hover:bg-white/40 font-bold p-3 px-5 rounded-r-lg transition">Search</button>
+            </form>
+            <div id="error-message" class="text-center text-yellow-300 mt-2 font-medium"></div>
+        </section>
+
+        <main id="weather-display" class="hidden">
+            <div id="loader" class="loader"></div>
+            <div id="weather-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6 opacity-0 transition-opacity duration-500">
+                
+                <!-- Left Column -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- Current Conditions -->
+                    <section id="current-conditions" class="glassmorphism rounded-2xl p-6 shadow-lg dynamic-bg">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h2 class="text-3xl font-bold" id="location-name"></h2>
+                                <p class="text-white/80" id="current-description"></p>
+                            </div>
+                            <div class="text-6xl" id="current-icon"></div>
+                        </div>
+                        <div class="flex items-end justify-between mt-4">
+                            <div class="text-7xl font-bold" id="current-temp"></div>
+                            <div class="text-right">
+                                <p>Wind: <span id="current-wind" class="font-semibold"></span></p>
+                                <p>Humidity: <span id="current-humidity" class="font-semibold"></span></p>
+                            </div>
+                        </div>
+                        <div id="what-to-wear-section" class="mt-6">
+                            <button id="what-to-wear-button" class="w-full bg-white/20 hover:bg-white/30 font-bold py-2 px-4 rounded-lg transition">✨ What to Wear?</button>
+                            <div id="what-to-wear-container" class="hidden text-sm bg-black/20 p-3 rounded-lg mt-2"></div>
+                        </div>
+                    </section>
+
+                    <!-- Hourly Forecast -->
+                    <section id="hourly-forecast" class="glassmorphism rounded-2xl p-6 shadow-lg">
+                        <h2 class="text-xl font-bold mb-4">Hourly Forecast</h2>
+                        <div class="chart-container h-[250px] max-h-[250px]">
+                             <canvas id="hourly-chart"></canvas>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Right Column (7-Day Forecast) -->
+                <section id="daily-forecast" class="glassmorphism lg:col-span-1 rounded-2xl p-6 shadow-lg">
+                     <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">7-Day Forecast</h2>
+                        <button id="gemini-summary-button" title="Get Weekly Summary" class="bg-white/20 hover:bg-white/30 text-white font-bold p-2 rounded-full transition">✨</button>
+                     </div>
+                     <div id="gemini-summary-container" class="hidden text-sm bg-black/20 p-3 rounded-lg mb-4"></div>
+                     <div id="daily-cards-container" class="space-y-3"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Gemini Modal -->
+    <div id="gemini-modal" class="modal fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-content glassmorphism rounded-lg shadow-xl w-full max-w-md p-6 transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">✨ Activity Suggestions</h3>
+                <button id="close-modal-button" class="text-white/80 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+<script>
+    const weatherForm = document.getElementById('weather-form');
+    const locationInput = document.getElementById('location-input');
+    const errorMessage = document.getElementById('error-message');
+    const weatherDisplay = document.getElementById('weather-display');
+    const loader = document.getElementById('loader');
+    const weatherContent = document.getElementById('weather-content');
+    const locationNameEl = document.getElementById('location-name');
+    const currentIconEl = document.getElementById('current-icon');
+    const currentDescriptionEl = document.getElementById('current-description');
+    const currentTempEl = document.getElementById('current-temp');
+    const currentWindEl = document.getElementById('current-wind');
+    const currentHumidityEl = document.getElementById('current-humidity');
+    const dailyCardsContainer = document.getElementById('daily-cards-container');
+    const hourlyChartCanvas = document.getElementById('hourly-chart');
+    const currentConditionsCard = document.getElementById('current-conditions');
+    
+    let hourlyChart = null;
+    let fullDailyData = null; 
+    let currentLocation = '';
+
+    const whatToWearButton = document.getElementById('what-to-wear-button');
+    const whatToWearContainer = document.getElementById('what-to-wear-container');
+    const geminiSummaryButton = document.getElementById('gemini-summary-button');
+    const geminiSummaryContainer = document.getElementById('gemini-summary-container');
+    const geminiModal = document.getElementById('gemini-modal');
+    const modalBody = document.getElementById('modal-body');
+    const closeModalButton = document.getElementById('close-modal-button');
+
+    const WMO_CODES = {
+        0: { description: "Clear sky", icon: "☀️" }, 1: { description: "Mainly clear", icon: "🌤️" }, 2: { description: "Partly cloudy", icon: "⛅" },
+        3: { description: "Overcast", icon: "☁️" }, 45: { description: "Fog", icon: "🌫️" }, 48: { description: "Rime fog", icon: "🌫️" },
+        51: { description: "Light drizzle", icon: "🌧️" }, 53: { description: "Drizzle", icon: "🌧️" }, 55: { description: "Dense drizzle", icon: "🌧️" },
+        61: { description: "Slight rain", icon: "🌧️" }, 63: { description: "Rain", icon: "🌧️" }, 65: { description: "Heavy rain", icon: "🌧️" },
+        80: { description: "Rain showers", icon: "🌦️" }, 81: { description: "Rain showers", icon: "🌦️" }, 82: { description: "Violent showers", icon: "🌦️" },
+        95: { description: "Thunderstorm", icon: "⛈️" }, 96: { description: "Thunderstorm", icon: "⛈️" }, 99: { description: "Thunderstorm", icon: "⛈️" }
+    };
+
+    function getWeatherInfo(code) { return WMO_CODES[code] || { description: "Unknown", icon: "🤷" }; }
+
+    function getDynamicBackgroundClass(weatherCode, isDay) {
+        const isRainy = [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99].includes(weatherCode);
+        const isCloudy = [2, 3, 45, 48].includes(weatherCode);
+        
+        if (isDay) {
+            if (isRainy) return 'bg-day-rain';
+            if (isCloudy) return 'bg-day-cloudy';
+            return 'bg-day-clear';
+        } else {
+            if (isRainy) return 'bg-night-rain';
+            if (isCloudy) return 'bg-night-cloudy';
+            return 'bg-night-clear';
+        }
+    }
+
+    async function callGeminiAPI(prompt, button) {
+        if(button) button.disabled = true;
+        const originalButtonContent = button ? button.innerHTML : '';
+        if(button) button.innerHTML = '<div class="gemini-loader mx-auto"></div>';
+
+        try {
+            const response = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'API request failed');
+            }
+
+            const result = await response.json();
+            if (result.candidates && result.candidates.length > 0) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                return "Sorry, I couldn't generate a response right now.";
+            }
+        } catch (error) {
+            console.error("Error calling backend API:", error);
+            return `Error: Could not retrieve AI insights. ${error.message}`;
+        } finally {
+            if(button) {
+                button.disabled = false;
+                button.innerHTML = originalButtonContent;
+            }
+        }
+    }
+
+    async function fetchWeatherByCoords(latitude, longitude) {
+        const geoResponse = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+        const geoData = await geoResponse.json();
+        const locationName = `${geoData.city}, ${geoData.principalSubdivision}, ${geoData.countryName}`;
+        await fetchWeather(locationName, { latitude, longitude });
+    }
+
+    async function fetchWeather(location, coords = null) {
+        weatherDisplay.classList.remove('hidden');
+        weatherContent.classList.add('opacity-0');
+        loader.style.display = 'block';
+        errorMessage.textContent = '';
+        geminiSummaryContainer.classList.add('hidden');
+        whatToWearContainer.classList.add('hidden');
+
+        try {
+            let latitude, longitude;
+            if (coords) {
+                latitude = coords.latitude;
+                longitude = coords.longitude;
+                currentLocation = location;
+            } else {
+                const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`);
+                const geoData = await geoResponse.json();
+                if (!geoData.results) throw new Error("Location not found.");
+                const { name, admin1, country } = geoData.results[0];
+                latitude = geoData.results[0].latitude;
+                longitude = geoData.results[0].longitude;
+                currentLocation = admin1 ? `${name}, ${admin1}` : `${name}, ${country}`;
+            }
+            
+            const weatherParams = `latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,is_day,weather_code,wind_speed_10m&hourly=temperature_2m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
+            const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?${weatherParams}`);
+            const weatherData = await weatherResponse.json();
+            if (weatherData.error) throw new Error(weatherData.reason);
+            
+            fullDailyData = weatherData.daily;
+            updateUI(weatherData, currentLocation);
+
+        } catch (error) {
+            errorMessage.textContent = error.message;
+            weatherDisplay.classList.add('hidden');
+        } finally {
+            loader.style.display = 'none';
+            weatherContent.classList.remove('opacity-0');
+        }
+    }
+
+    function updateUI(data, location) {
+        locationNameEl.textContent = location;
+        const currentWeatherInfo = getWeatherInfo(data.current.weather_code);
+        currentIconEl.textContent = currentWeatherInfo.icon;
+        currentDescriptionEl.textContent = currentWeatherInfo.description;
+        currentTempEl.innerHTML = `${Math.round(data.current.temperature_2m)}&deg;`;
+        currentWindEl.textContent = `${data.current.wind_speed_10m} km/h`;
+        currentHumidityEl.textContent = `${data.current.relative_humidity_2m}%`;
+
+        const bgClass = getDynamicBackgroundClass(data.current.weather_code, data.current.is_day === 1);
+        currentConditionsCard.className = `glassmorphism rounded-2xl p-6 shadow-lg dynamic-bg ${bgClass}`;
+
+        updateHourlyChart(data.hourly);
+        updateDailyForecast(data.daily);
+    }
+    
+    function updateHourlyChart(hourlyData) {
+        if (hourlyChart) hourlyChart.destroy();
+        const now = new Date();
+        const nowIndex = Math.floor(now.getHours());
+        const labels = hourlyData.time.slice(nowIndex, nowIndex + 24).map(t => new Date(t).getHours() + ':00');
+        const temps = hourlyData.temperature_2m.slice(nowIndex, nowIndex + 24);
+
+        hourlyChart = new Chart(hourlyChartCanvas, {
+            type: 'line', data: { labels, datasets: [{ data: temps, fill: true, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderColor: 'rgba(255, 255, 255, 0.8)', tension: 0.4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { ticks: { color: 'rgba(255, 255, 255, 0.8)' }, grid: { display: false } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y.toFixed(0)}°C` } } } }
+        });
+    }
+
+    function updateDailyForecast(dailyData) {
+        dailyCardsContainer.innerHTML = '';
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(dailyData.time[i]);
+            const day = i === 0 ? "Today" : date.toLocaleDateString('en-US', { weekday: 'short' });
+            const weatherInfo = getWeatherInfo(dailyData.weather_code[i]);
+            const card = `
+                <div class="flex items-center justify-between p-2 rounded-lg hover:bg-white/10 cursor-pointer" onclick="handleActivitySuggestion(${i})">
+                    <p class="font-semibold w-1/4">${day}</p>
+                    <div class="text-2xl w-1/4 text-center">${weatherInfo.icon}</div>
+                    <div class="w-1/2 text-right">
+                        <span class="font-bold">${Math.round(dailyData.temperature_2m_max[i])}&deg;</span>
+                        <span class="text-white/60"> / ${Math.round(dailyData.temperature_2m_min[i])}&deg;</span>
+                    </div>
+                </div>`;
+            dailyCardsContainer.innerHTML += card;
+        }
+    }
+    
+    async function handleWhatToWear() {
+        whatToWearContainer.classList.remove('hidden');
+        whatToWearContainer.innerHTML = '<div class="gemini-loader mx-auto"></div>';
+        const temp = currentTempEl.innerText;
+        const wind = currentWindEl.innerText;
+        const condition = currentDescriptionEl.innerText;
+        const prompt = `Based on the current weather in ${currentLocation} (Temperature: ${temp}, Wind: ${wind}, Condition: ${condition}), briefly suggest what to wear. Be concise and practical, like a helpful friend. For example: "It's quite warm, so a t-shirt and shorts would be perfect. Maybe bring sunglasses!"`;
+        const advice = await callGeminiAPI(prompt, whatToWearButton);
+        whatToWearContainer.innerHTML = advice;
+    }
+
+    async function handleWeeklySummary() {
+        geminiSummaryContainer.classList.remove('hidden');
+        geminiSummaryContainer.innerHTML = '<div class="gemini-loader mx-auto"></div>';
+        let forecastString = "";
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(fullDailyData.time[i]).toLocaleDateString('en-US', { weekday: 'long' });
+            const weatherInfo = getWeatherInfo(fullDailyData.weather_code[i]);
+            forecastString += `${day}: ${weatherInfo.description}, High ${Math.round(fullDailyData.temperature_2m_max[i])}°C.\n`;
+        }
+        const prompt = `You are a friendly weather forecaster. Based on the 7-day forecast for ${currentLocation}, write a short, conversational summary for planning the week. Focus on the key patterns (e.g., "The week starts warm but expect rain by Wednesday...").\n\nData:\n${forecastString}`;
+        const summary = await callGeminiAPI(prompt, geminiSummaryButton);
+        geminiSummaryContainer.innerHTML = summary.replace(/\n/g, '<br>');
+    }
+
+    async function handleActivitySuggestion(dayIndex) {
+        modalBody.innerHTML = '<div class="gemini-loader"></div>';
+        geminiModal.classList.remove('hidden', 'opacity-0');
+        geminiModal.querySelector('.modal-content').classList.remove('scale-95');
+
+        const day = new Date(fullDailyData.time[dayIndex]).toLocaleDateString('en-US', { weekday: 'long' });
+        const weatherInfo = getWeatherInfo(fullDailyData.weather_code[dayIndex]);
+        const highTemp = Math.round(fullDailyData.temperature_2m_max[dayIndex]);
+        
+        const prompt = `For the upcoming ${day} in ${currentLocation}, the forecast is: "${weatherInfo.description}" with a high of ${highTemp}°C. Suggest 3-4 suitable indoor and outdoor activities. For each, provide a one-sentence reason why it's a good fit. Format with clear headings.`;
+        const suggestions = await callGeminiAPI(prompt);
+        modalBody.innerHTML = suggestions.replace(/\n/g, '<br>');
+    }
+
+    weatherForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const location = locationInput.value.trim();
+        if (location) fetchWeather(location);
+    });
+
+    whatToWearButton.addEventListener('click', handleWhatToWear);
+    geminiSummaryButton.addEventListener('click', handleWeeklySummary);
+    closeModalButton.addEventListener('click', () => {
+        geminiModal.classList.add('opacity-0');
+        setTimeout(() => geminiModal.classList.add('hidden'), 250);
+    });
+
+    window.addEventListener('load', () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                position => fetchWeatherByCoords(position.coords.latitude, position.coords.longitude),
+                () => fetchWeather('Bhubaneswar') // Fallback
+            );
+        } else {
+            fetchWeather('Bhubaneswar'); // Fallback
+        }
+    });
+
+</script>
+</body>
+</html>
